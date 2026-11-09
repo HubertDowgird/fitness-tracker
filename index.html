@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Fitness">
+<meta name="theme-color" content="#0c0f12">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-180.png">
+<title>Fitness Tracker</title>
+<style>
+:root{--bg:#0c0f12;--card:#151a1f;--field:#0f1317;--line:#252c34;--txt:#eef1f4;--mut:#8b96a3;--acc:#5fd3a6;color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
+#app{max-width:520px;margin:0 auto;padding:calc(env(safe-area-inset-top,0px) + 16px) 16px calc(100px + env(safe-area-inset-bottom,0px))}
+.top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;gap:12px}
+h1{font-size:28px;letter-spacing:-.02em;margin:0;font-weight:700}
+.sub{color:var(--mut);font-size:14px;margin-top:2px}
+.pill{font-size:13px;padding:5px 12px;border-radius:99px;border:1px solid var(--line);color:var(--mut);white-space:nowrap;margin-top:4px}
+.pill.ok{color:var(--acc);border-color:rgba(95,211,166,.45);background:rgba(95,211,166,.08)}
+.card{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:14px 16px;margin-bottom:12px}
+.card h2{font-size:15px;font-weight:600;color:var(--mut);margin:0 0 8px}
+.row{display:flex;align-items:center;gap:12px;padding:5px 0}
+.row label{flex:1;color:var(--txt);font-size:16px}
+.f{display:flex;align-items:center;gap:8px}
+.f input{width:112px;background:var(--field);border:1px solid var(--line);border-radius:12px;color:var(--txt);font:inherit;font-size:18px;font-weight:600;padding:9px 12px;text-align:right;outline:none}
+.f input:focus,textarea:focus{border-color:var(--acc)}
+.u{color:var(--mut);font-size:14px;width:32px}
+.big{text-align:center;padding:20px 16px}
+.big .f{justify-content:center}
+.big .f input{width:190px;font-size:44px;font-weight:700;padding:8px 12px;letter-spacing:-.02em}
+.big .u{font-size:18px;width:auto}
+textarea{width:100%;min-height:84px;background:var(--field);border:1px solid var(--line);border-radius:12px;color:var(--txt);font:inherit;padding:10px 12px;resize:vertical;outline:none}
+.btn{display:block;width:100%;border:0;border-radius:16px;padding:16px;font:inherit;font-size:17px;font-weight:600;background:var(--acc);color:#05150e;margin-top:6px}
+.btn:active{opacity:.85}
+.btn.s{background:transparent;color:var(--mut);border:1px solid var(--line);margin-top:10px}
+.day{display:flex;align-items:center;justify-content:space-between;gap:12px;width:100%;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:16px;padding:14px 16px;margin-bottom:10px;color:var(--txt);font:inherit}
+.day b{display:block;font-weight:600}
+.day span.m{color:var(--mut);font-size:14px}
+.pick{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:16px}
+.pick input{background:var(--field);border:1px solid var(--line);border-radius:12px;color:var(--txt);font:inherit;padding:8px 10px;color-scheme:dark}
+.empty{color:var(--mut);text-align:center;padding:40px 0}
+nav{position:fixed;left:0;right:0;bottom:0;display:flex;background:rgba(12,15,18,.92);-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px);z-index:5}
+nav button{flex:1;background:none;border:0;color:var(--mut);font:inherit;font-size:12px;padding:10px 0 9px;display:flex;flex-direction:column;align-items:center;gap:3px}
+nav button.on{color:var(--acc)}
+nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+#sheet{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:flex-end;z-index:9}
+#sheet.show{display:flex}
+.box{background:var(--card);width:100%;max-height:88%;overflow:auto;border-radius:22px 22px 0 0;padding:18px 16px calc(18px + env(safe-area-inset-bottom,0px));max-width:520px;margin:0 auto}
+.box h3{margin:0;font-size:19px}
+pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo,monospace;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0}
+#toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--acc);color:#05150e;padding:10px 18px;border-radius:99px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;z-index:10}
+#toast.show{opacity:1}
+</style>
+</head>
+<body>
+<div id="app"></div>
+<nav>
+  <button id="n-day"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>Today</button>
+  <button id="n-list"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Days</button>
+</nav>
+<div id="sheet"><div class="box">
+  <h3>Report copied</h3>
+  <pre id="rep"></pre>
+  <button class="btn" id="cp">Copy report again</button>
+  <button class="btn s" id="cl">Close</button>
+</div></div>
+<div id="toast"></div>
+<script>
+const K='fit.days.v1';
+let db={};
+try{db=JSON.parse(localStorage.getItem(K)||'{}')}catch(e){db={}}
+const $=id=>document.getElementById(id);
+const pad=n=>String(n).padStart(2,'0');
+const fmt=d=>d.getFullYear()+'-'+pad(d.getMonth()+1)+'-'+pad(d.getDate());
+const today=()=>fmt(new Date());
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let cur=today(),tab='day';
+
+function save(){try{localStorage.setItem(K,JSON.stringify(db))}catch(e){toast('Could not save data')}}
+function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),1800)}
+const long=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const short=d=>new Date(d+'T12:00:00').toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short',year:'numeric'});
+
+const CARDS=[
+ {t:'Body weight',big:1,r:[['weight','Morning weight','kg','decimal']]},
+ {t:'Nutrition',r:[['kcal','Calories eaten','kcal','numeric'],['p','Protein','g','decimal'],['c','Carbohydrates','g','decimal'],['f','Fat','g','decimal']]},
+ {t:'Activity',r:[['steps','Steps','','numeric'],['act','Active calories','kcal','numeric'],['rest','Resting calories','kcal','numeric']]},
+ {t:'Sleep',r:[['sh','Hours','h','numeric'],['sm','Minutes','min','numeric'],['ss','Sleep score','','numeric']]}
+];
+
+function render(){
+  $('n-day').classList.toggle('on',tab==='day');
+  $('n-list').classList.toggle('on',tab==='list');
+  $('app').innerHTML=tab==='day'?dayView():listView();
+}
+
+function dayView(){
+  const d=db[cur]||{},isT=cur===today();
+  let h=`<div class="top"><div><h1>${isT?'Today':short(cur)}</h1><div class="sub">${isT?long(cur):'Editing a past day'}</div></div><span class="pill ${d.done?'ok':''}">${d.done?'Completed':'In progress'}</span></div>`;
+  for(const c of CARDS){
+    h+=`<div class="card ${c.big?'big':''}"><h2>${c.t}</h2>`;
+    for(const [k,l,u,m] of c.r){
+      h+=`<div class="row">${c.big?'':`<label for="i-${k}">${l}</label>`}<div class="f"><input id="i-${k}" data-k="${k}" inputmode="${m}" autocomplete="off" placeholder="–" value="${d[k]!==undefined?esc(d[k]):''}">${u?`<span class="u">${u}</span>`:''}</div></div>`;
+    }
+    h+='</div>';
+  }
+  h+=`<div class="card"><h2>Notes</h2><textarea data-k="notes" placeholder="How did the day go?">${esc(d.notes||'')}</textarea></div>`;
+  h+=d.done
+    ?`<button class="btn" data-a="copy">Copy report</button><button class="btn s" data-a="reopen">Reopen day</button>`
+    :`<button class="btn" data-a="close">Close day and copy report</button>`;
+  return h;
+}
+
+function listView(){
+  const ks=Object.keys(db).filter(k=>Object.keys(db[k]).length).sort().reverse();
+  let h=`<div class="top"><div><h1>Days</h1><div class="sub">Tap a day to view or edit it</div></div></div>`;
+  h+=`<div class="pick"><span>Open another date</span><input type="date" id="pick" max="${today()}"></div>`;
+  if(!ks.length)return h+'<div class="empty">No days saved yet.<br>Fill in Today and it will show up here.</div>';
+  for(const k of ks){
+    const d=db[k],s=[];
+    if(d.weight)s.push(d.weight+' kg');
+    if(d.kcal)s.push(d.kcal+' kcal');
+    if(d.steps)s.push(d.steps+' steps');
+    h+=`<button class="day" data-d="${k}"><div><b>${short(k)}</b><span class="m">${s.join(', ')||'Notes only'}</span></div><span class="pill ${d.done?'ok':''}">${d.done?'Completed':'In progress'}</span></button>`;
+  }
+  return h;
+}
+
+function report(date){
+  const d=db[date]||{},L=['PERSONAL FITNESS TRACKER — DAILY REPORT','','Date: '+date];
+  const has=k=>d[k]!==undefined&&d[k]!==''&&!isNaN(Number(d[k]));
+  const n=k=>String(Number(d[k]));
+  const sec=(t,a)=>{a=a.filter(Boolean);if(a.length)L.push('',t,...a)};
+  sec('BODY WEIGHT',[has('weight')&&'- Morning weight: '+n('weight')+' kg']);
+  let dur=null;
+  if(has('sh')||has('sm'))dur='- Duration: '+(has('sh')?n('sh'):0)+'h '+(has('sm')?n('sm'):0)+'m';
+  sec('SLEEP',[dur,has('ss')&&'- Sleep score: '+n('ss')]);
+  sec('ACTIVITY',[has('steps')&&'- Steps: '+Number(d.steps).toLocaleString('en-US'),has('act')&&'- Active calories burned: '+n('act')+' kcal',has('rest')&&'- Resting calories burned: '+n('rest')+' kcal']);
+  sec('NUTRITION',[has('kcal')&&'- Calories consumed: '+n('kcal')+' kcal',has('p')&&'- Protein: '+n('p')+' g',has('c')&&'- Carbohydrates: '+n('c')+' g',has('f')&&'- Fat: '+n('f')+' g']);
+  if(d.notes&&d.notes.trim())sec('NOTES',['- '+d.notes.trim()]);
+  return L.join('\n');
+}
+
+async function copy(t){
+  try{await navigator.clipboard.writeText(t);return true}catch(e){}
+  try{const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;opacity:0';document.body.appendChild(a);a.select();const ok=document.execCommand('copy');a.remove();return ok}catch(e){return false}
+}
+
+async function doCopy(){
+  const t=report(cur),ok=await copy(t);
+  $('rep').textContent=t;
+  document.querySelector('.box h3').textContent=ok?'Report copied':'Copy failed, select the text below';
+  $('sheet').classList.add('show');
+  if(ok)toast('Copied to clipboard');
+}
+
+document.addEventListener('input',e=>{
+  const k=e.target.dataset&&e.target.dataset.k;if(!k)return;
+  const d=db[cur]=db[cur]||{};
+  let v=k==='notes'?e.target.value:e.target.value.replace(',','.').trim();
+  if(v.trim()==='')delete d[k];else d[k]=v;
+  if(!Object.keys(d).length)delete db[cur];
+  save();
+});
+
+document.addEventListener('click',async e=>{
+  const a=e.target.closest('[data-a]'),dd=e.target.closest('[data-d]');
+  if(dd){cur=dd.dataset.d;tab='day';render();scrollTo(0,0);return}
+  if(!a)return;
+  if(a.dataset.a==='close'){const d=db[cur]=db[cur]||{};d.done=1;save();render();await doCopy()}
+  else if(a.dataset.a==='copy')await doCopy();
+  else if(a.dataset.a==='reopen'){delete db[cur].done;save();render()}
+});
+document.addEventListener('change',e=>{if(e.target.id==='pick'&&e.target.value){cur=e.target.value;tab='day';render();scrollTo(0,0)}});
+$('n-day').onclick=()=>{cur=today();tab='day';render();scrollTo(0,0)};
+$('n-list').onclick=()=>{tab='list';render();scrollTo(0,0)};
+$('cp').onclick=async()=>{const ok=await copy($('rep').textContent);toast(ok?'Copied to clipboard':'Copy failed')};
+$('cl').onclick=()=>$('sheet').classList.remove('show');
+$('sheet').onclick=e=>{if(e.target.id==='sheet')$('sheet').classList.remove('show')};
+
+if(navigator.storage&&navigator.storage.persist)navigator.storage.persist().catch(()=>{});
+if('serviceWorker' in navigator)navigator.serviceWorker.register('sw.js').catch(()=>{});
+render();
+</script>
+</body>
+</html>
