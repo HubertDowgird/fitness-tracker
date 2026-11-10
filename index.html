@@ -15,7 +15,7 @@
 :root{--bg:#0c0f12;--card:#151a1f;--field:#0f1317;--line:#252c34;--txt:#eef1f4;--mut:#8b96a3;--acc:#5fd3a6;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-body{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
+body{position:fixed;inset:0;height:auto;display:grid;grid-template-rows:minmax(0,1fr) auto;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
 #app{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
 .wrap{max-width:520px;margin:0 auto;padding:16px 16px 12px}
 .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px}
@@ -48,7 +48,7 @@ textarea{width:100%;min-height:84px;background:var(--field);border:1px solid var
 .hint{color:var(--mut);font-size:14px;margin:14px 4px}
 details.card summary{cursor:pointer;color:var(--mut)}
 details.card[open] summary{margin-bottom:10px}
-nav{flex:none;display:flex;background:var(--bg);border-top:1px solid var(--line);padding-bottom:max(0px, calc(env(safe-area-inset-bottom,0px) - 8px))}
+nav{flex:none;display:flex;background:var(--bg);border-top:1px solid var(--line);padding-bottom:min(env(safe-area-inset-bottom,0px),12px)}
 nav button{flex:1;background:none;border:0;color:var(--mut);font:inherit;font-size:12px;padding:10px 0 9px;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav button.on{color:var(--acc)}
 nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -162,6 +162,23 @@ function listView(){
   return h;
 }
 
+function workoutFromPlan(plan,date){
+  const previousDate=Object.keys(db).filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k)&&k<date)
+    .sort().reverse().find(k=>{
+      const w=db[k]&&cleanWorkout(db[k].workout);
+      return w&&w.planName===plan.name&&w.exercises.some(x=>x.sets.some(row=>row.weight!==''||row.reps!==''));
+    });
+  const previous=previousDate?cleanWorkout(db[previousDate].workout):null;
+  let copied=false;
+  const exercises=plan.exercises.map((name,i)=>{
+    const occurrence=plan.exercises.slice(0,i).filter(x=>x===name).length;
+    const old=previous&&previous.exercises.filter(x=>x.name===name)[occurrence];
+    const useOld=old&&old.sets.some(row=>row.weight!==''||row.reps!=='');
+    if(useOld)copied=true;
+    return {name,notes:'',sets:useOld?old.sets.map(row=>({...row})):[blankSet()]};
+  });
+  return {planName:plan.name,exercises,...(copied?{previousDate}:{})};
+}
 function blankSet(){return {weight:'',reps:''}}
 function cleanWorkout(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
@@ -172,6 +189,7 @@ function cleanWorkout(value){
   };
   return {
     planName:typeof value.planName==='string'?value.planName:'',
+    ...(typeof value.previousDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value.previousDate)?{previousDate:value.previousDate}:{}),
     exercises:Array.isArray(value.exercises)?value.exercises.filter(x=>x&&typeof x.name==='string').map(x=>({
       name:x.name,notes:typeof x.notes==='string'?x.notes:'',
       sets:Array.isArray(x.sets)?x.sets.map(row=>({weight:numberText(row&&row.weight),reps:numberText(row&&row.reps,true)})):[blankSet()]
@@ -185,6 +203,7 @@ function workoutView(d){
   h+=`<label for="workout-plan">Training plan</label><select id="workout-plan" class="plan-input"><option value="">${w.planName?'Change training plan…':'Choose training plan…'}</option>${plans.map((p,i)=>`<option value="${i}">${esc(p.name)}</option>`).join('')}</select>`;
   if(!plans.length)h+='<p class="hint">Create a training plan in Exercises to select it here.</p><button class="btn s" data-a="open-plans">Go to Exercises</button>';
   if(w.planName)h+=`<p class="plan-name"><b>${esc(w.planName)}</b></p>`;
+  if(w.previousDate)h+=`<p class="hint">Sets prefilled from ${short(w.previousDate)}. Adjust them to what you do today. Exercise notes start empty.</p>`;
   w.exercises.forEach((x,i)=>{
     h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3><div class="sub">${x.sets.length} ${x.sets.length===1?'set':'sets'}</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
     x.sets.forEach((row,j)=>{
@@ -346,7 +365,7 @@ document.addEventListener('change',e=>{
     if(w.planName&&!confirm('Replace this day’s workout with "'+p.name+'"? Existing sets and notes will be removed.')){
       e.target.value='';return;
     }
-    db[cur].workout={planName:p.name,exercises:p.exercises.map(name=>({name,notes:'',sets:[blankSet()]}))};
+    db[cur].workout=workoutFromPlan(p,cur);
     save();renderWorkout();
   }
 });
