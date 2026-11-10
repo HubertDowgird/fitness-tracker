@@ -108,7 +108,8 @@ const today=()=>fmt(new Date());
 const addDays=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return fmt(d)};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const filled=k=>db[k]&&Object.keys(db[k]).length>0;
-let cur=today(),tab='day',weekEnd=today();
+const monday=date=>addDays(date,-((new Date(date+'T12:00:00').getDay()+6)%7));
+let cur=today(),tab='day',weekStart=monday(today());
 
 function save(){try{localStorage.setItem(K,JSON.stringify(db))}catch(e){toast('Could not save data')}}
 function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2200)}
@@ -151,9 +152,9 @@ function dayView(){
 }
 
 function listView(){
-  const ks=Array.from({length:7},(_,i)=>addDays(weekEnd,-i));
+  const ks=Array.from({length:7},(_,i)=>addDays(weekStart,i));
   let h=`<div class="top"><div><h1>Days</h1><div class="sub">Tap a day to view it or fill it in</div></div></div>`;
-  h+=`<div class="dn"><button data-a="week-prev">‹ Previous week</button><button data-a="week-next" ${weekEnd>=today()?'disabled':''}>Next week ›</button></div><p class="hint">${short(addDays(weekEnd,-6))} – ${short(weekEnd)}</p>`;
+  h+=`<div class="dn"><button data-a="week-prev">‹ Previous week</button><button data-a="week-next" ${weekStart>=monday(today())?'disabled':''}>Next week ›</button></div><p class="hint">${short(weekStart)} – ${short(addDays(weekStart,6))}</p>`;
   for(const k of ks){
     const d=db[k]||{},s=[],has=filled(k);
     if(d.weight)s.push(d.weight+' kg');
@@ -425,8 +426,8 @@ document.addEventListener('click',async e=>{
     }
     save();renderWorkout();return;
   }
-  if(act==='week-prev'){weekEnd=addDays(weekEnd,-7);render();toTop();return}
-  if(act==='week-next'){if(weekEnd<today()){weekEnd=addDays(weekEnd,7);render();toTop()}return}
+  if(act==='week-prev'){weekStart=addDays(weekStart,-7);render();toTop();return}
+  if(act==='week-next'){if(weekStart<monday(today())){weekStart=addDays(weekStart,7);render();toTop()}return}
   if(act==='delete-plan'){
     const i=Number(a.dataset.index);
     if(plans[i]&&confirm('Delete training plan "'+plans[i].name+'"?')){
@@ -445,7 +446,7 @@ document.addEventListener('click',async e=>{
 
 $('file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(f)restore(await f.text())};
 $('n-day').onclick=()=>{cur=today();tab='day';render();toTop()};
-$('n-list').onclick=()=>{weekEnd=today();tab='list';render();toTop()};
+$('n-list').onclick=()=>{weekStart=monday(today());tab='list';render();toTop()};
 $('n-ex').onclick=()=>{tab='ex';render();toTop()};
 $('n-bk').onclick=()=>{tab='bk';render();toTop()};
 $('cp').onclick=async()=>{const ok=await copy($('rep').textContent);toast(ok?'Copied to clipboard':'Copy failed')};
