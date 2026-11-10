@@ -67,12 +67,16 @@ pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo
 .workout-toggle input{width:22px;height:22px;accent-color:var(--acc)}
 .workout-exercise{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
 .workout-exercise h3{font-size:17px;margin:0 0 10px;overflow-wrap:anywhere}
-.set-row{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(0,1fr) 44px;gap:8px;align-items:center;margin-bottom:8px}
+.set-row{display:grid;grid-template-columns:44px minmax(0,1fr) minmax(0,1fr) 44px;gap:8px;align-items:center;margin-bottom:8px}
 .set-row input{width:100%;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:10px;color:var(--txt);font:inherit;padding:10px 8px}
 .set-row input:focus{outline:1px solid var(--acc)}
 .set-head{font-size:12px;color:var(--mut)}
 .remove-set{min-height:44px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--mut);font-size:22px}
 .workout-exercise .btn{font-size:14px;padding:10px;min-height:44px;margin-bottom:12px}
+.set-check{display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:48px;font-size:12px;gap:2px;cursor:pointer}
+.set-row .set-check input{width:22px;height:22px;margin:0;padding:0;accent-color:var(--acc)}
+.set-row.completed{background:rgba(95,211,166,.08);border-radius:10px}
+.set-row.completed .set-check{color:var(--acc)}
 </style>
 </head>
 <body>
@@ -175,11 +179,11 @@ function workoutFromPlan(plan,date){
     const old=previous&&previous.exercises.filter(x=>x.name===name)[occurrence];
     const useOld=old&&old.sets.some(row=>row.weight!==''||row.reps!=='');
     if(useOld)copied=true;
-    return {name,notes:'',sets:useOld?old.sets.map(row=>({...row})):[blankSet()]};
+    return {name,notes:'',sets:useOld?old.sets.map(row=>({...row,done:false})):[blankSet()]};
   });
   return {planName:plan.name,exercises,...(copied?{previousDate}:{})};
 }
-function blankSet(){return {weight:'',reps:''}}
+function blankSet(){return {weight:'',reps:'',done:false}}
 function cleanWorkout(value){
   if(!value||typeof value!=='object'||Array.isArray(value))return null;
   const numberText=(v,integer=false)=>{
@@ -192,7 +196,7 @@ function cleanWorkout(value){
     ...(typeof value.previousDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value.previousDate)?{previousDate:value.previousDate}:{}),
     exercises:Array.isArray(value.exercises)?value.exercises.filter(x=>x&&typeof x.name==='string').map(x=>({
       name:x.name,notes:typeof x.notes==='string'?x.notes:'',
-      sets:Array.isArray(x.sets)?x.sets.map(row=>({weight:numberText(row&&row.weight),reps:numberText(row&&row.reps,true)})):[blankSet()]
+      sets:Array.isArray(x.sets)?x.sets.map(row=>({weight:numberText(row&&row.weight),reps:numberText(row&&row.reps,true),done:!!row&&row.done===true})):[blankSet()]
     })):[]
   };
 }
@@ -205,9 +209,9 @@ function workoutView(d){
   if(w.planName)h+=`<p class="plan-name"><b>${esc(w.planName)}</b></p>`;
   if(w.previousDate)h+=`<p class="hint">Sets prefilled from ${short(w.previousDate)}. Adjust them to what you do today. Exercise notes start empty.</p>`;
   w.exercises.forEach((x,i)=>{
-    h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3><div class="sub">${x.sets.length} ${x.sets.length===1?'set':'sets'}</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
+    h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3><div class="sub">${x.sets.filter(row=>row.done===true).length}/${x.sets.length} sets completed</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
     x.sets.forEach((row,j)=>{
-      h+=`<div class="set-row"><span>${j+1}</span><input type="number" min="0" step="any" inputmode="decimal" data-workout="weight" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} weight in kg" placeholder="kg" value="${esc(row.weight)}"><input type="number" min="0" step="1" inputmode="numeric" data-workout="reps" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} repetitions" placeholder="reps" value="${esc(row.reps)}"><button class="remove-set" data-a="remove-set" data-ex="${i}" data-set="${j}" aria-label="Remove set ${j+1} from ${esc(x.name)}">×</button></div>`;
+      h+=`<div class="set-row ${row.done?'completed':''}"><label class="set-check" for="set-done-${i}-${j}"><input id="set-done-${i}-${j}" type="checkbox" data-workout="done" data-ex="${i}" data-set="${j}" aria-label="Mark ${esc(x.name)} set ${j+1} as completed" ${row.done?'checked':''}><span>${j+1}</span></label><input type="number" min="0" step="any" inputmode="decimal" data-workout="weight" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} weight in kg" placeholder="kg" value="${esc(row.weight)}"><input type="number" min="0" step="1" inputmode="numeric" data-workout="reps" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} repetitions" placeholder="reps" value="${esc(row.reps)}"><button class="remove-set" data-a="remove-set" data-ex="${i}" data-set="${j}" aria-label="Remove set ${j+1} from ${esc(x.name)}">×</button></div>`;
     });
     h+=`<button class="btn s" data-a="add-set" data-ex="${i}">+ Add set</button><label for="exercise-note-${i}">Exercise note</label><textarea id="exercise-note-${i}" data-workout="notes" data-ex="${i}" placeholder="Technique, effort, or other notes">${esc(x.notes)}</textarea></section>`;
   });
@@ -272,7 +276,7 @@ function report(date){
     const w=d.workout,lines=['- Plan: '+(w.planName||'Not selected')];
     for(const x of w.exercises){
       lines.push('- '+x.name+' ('+x.sets.length+' sets)');
-      x.sets.forEach((row,i)=>lines.push('  Set '+(i+1)+': '+(row.weight!==''?row.weight+' kg':'weight not entered')+' × '+(row.reps!==''?row.reps+' reps':'reps not entered')));
+      x.sets.forEach((row,i)=>lines.push('  ['+(row.done?'x':' ')+'] Set '+(i+1)+': '+(row.weight!==''?row.weight+' kg':'weight not entered')+' × '+(row.reps!==''?row.reps+' reps':'reps not entered')));
       if(x.notes.trim())lines.push('  Note: '+x.notes.trim());
     }
     sec('WORKOUT',lines);
@@ -295,7 +299,7 @@ async function doCopy(){
 }
 
 /* ---------- backup ---------- */
-const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:3,exported:new Date().toISOString(),days:db,plans},null,1);
+const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:4,exported:new Date().toISOString(),days:db,plans},null,1);
 function markBackup(){localStorage.setItem(KB,today());if(tab==='bk')render();toast('Backup exported')}
 
 async function exportBackup(){
@@ -345,6 +349,15 @@ document.addEventListener('submit',e=>{
   if(persistPlans([...plans,{name,exercises}])){render();toast('Training plan added')}
 });
 document.addEventListener('change',e=>{
+  if(e.target.dataset&&e.target.dataset.workout==='done'){
+    const w=db[cur]&&db[cur].workout,x=w&&w.exercises[Number(e.target.dataset.ex)];
+    const row=x&&x.sets[Number(e.target.dataset.set)];if(!row)return;
+    row.done=e.target.checked;
+    const focusId=e.target.id;
+    save();renderWorkout();
+    const checkbox=$(focusId);if(checkbox)checkbox.focus({preventScroll:true});
+    return;
+  }
   if(e.target.id==='workout-enabled'){
     const d=db[cur]||{};
     if(e.target.checked){
@@ -371,6 +384,7 @@ document.addEventListener('change',e=>{
 });
 document.addEventListener('input',e=>{
   const field=e.target.dataset&&e.target.dataset.workout;
+  if(field==='done')return;
   if(field){
     const w=db[cur]&&db[cur].workout,x=w&&w.exercises[Number(e.target.dataset.ex)];
     if(!x)return;
@@ -407,7 +421,7 @@ document.addEventListener('click',async e=>{
     if(act==='add-set')x.sets.push(blankSet());
     else{
       const i=Number(a.dataset.set),row=x.sets[i];if(!row)return;
-      if((row.weight!==''||row.reps!=='')&&!confirm('Remove this set?'))return;
+      if((row.done||row.weight!==''||row.reps!=='')&&!confirm('Remove this set?'))return;
       x.sets.splice(i,1);
     }
     save();renderWorkout();return;
