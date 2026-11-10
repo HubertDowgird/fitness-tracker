@@ -97,7 +97,7 @@ pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo
 <div id="toast"></div>
 <script>
 const K='fit.days.v1',KB='fit.lastBackup',KP='fit.plans.v1';
-let plans=[];
+let plans=[],editingPlan=null;
 try{plans=cleanPlans(JSON.parse(localStorage.getItem(KP)||'[]'))}catch(e){}
 let db={};
 try{db=JSON.parse(localStorage.getItem(K)||'{}')}catch(e){db={}}
@@ -167,21 +167,19 @@ function listView(){
 }
 
 function workoutFromPlan(plan,date){
-  const previousDate=Object.keys(db).filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k)&&k<date)
-    .sort().reverse().find(k=>{
-      const w=db[k]&&cleanWorkout(db[k].workout);
-      return w&&w.planName===plan.name&&w.exercises.some(x=>x.sets.some(row=>row.weight!==''||row.reps!==''));
-    });
-  const previous=previousDate?cleanWorkout(db[previousDate].workout):null;
-  let copied=false;
+  const history=Object.keys(db).filter(k=>/^\d{4}-\d{2}-\d{2}$/.test(k)&&k<date).sort().reverse()
+    .map(date=>({date,workout:cleanWorkout(db[date]&&db[date].workout)}))
+    .filter(item=>item.workout&&(item.workout.planId?item.workout.planId===plan.id:[plan.name,...(plan.previousNames||[])].includes(item.workout.planName)));
   const exercises=plan.exercises.map((name,i)=>{
     const occurrence=plan.exercises.slice(0,i).filter(x=>x===name).length;
-    const old=previous&&previous.exercises.filter(x=>x.name===name)[occurrence];
-    const useOld=old&&old.sets.some(row=>row.weight!==''||row.reps!=='');
-    if(useOld)copied=true;
-    return {name,notes:'',sets:useOld?old.sets.map(row=>({...row,done:false})):[blankSet()]};
+    for(const item of history){
+      const old=item.workout.exercises.filter(x=>x.name===name)[occurrence];
+      const sets=old?old.sets.filter(row=>row.done===true&&(row.weight!==''||row.reps!=='')):[];
+      if(sets.length)return {name,notes:'',previousDate:item.date,sets:sets.map(row=>({...row,done:false}))};
+    }
+    return {name,notes:'',sets:[blankSet()]};
   });
-  return {planName:plan.name,exercises,...(copied?{previousDate}:{})};
+  return {planId:plan.id,planName:plan.name,exercises};
 }
 function blankSet(){return {weight:'',reps:'',done:false}}
 function cleanWorkout(value){
@@ -193,9 +191,11 @@ function cleanWorkout(value){
   };
   return {
     planName:typeof value.planName==='string'?value.planName:'',
+    ...(typeof value.planId==='string'?{planId:value.planId}:{}),
     ...(typeof value.previousDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(value.previousDate)?{previousDate:value.previousDate}:{}),
     exercises:Array.isArray(value.exercises)?value.exercises.filter(x=>x&&typeof x.name==='string').map(x=>({
       name:x.name,notes:typeof x.notes==='string'?x.notes:'',
+      ...(typeof x.previousDate==='string'&&/^\d{4}-\d{2}-\d{2}$/.test(x.previousDate)?{previousDate:x.previousDate}:{}),
       sets:Array.isArray(x.sets)?x.sets.map(row=>({weight:numberText(row&&row.weight),reps:numberText(row&&row.reps,true),done:!!row&&row.done===true})):[blankSet()]
     })):[]
   };
@@ -209,7 +209,7 @@ function workoutView(d){
   if(w.planName)h+=`<p class="plan-name"><b>${esc(w.planName)}</b></p>`;
   if(w.previousDate)h+=`<p class="hint">Sets prefilled from ${short(w.previousDate)}. Adjust them to what you do today. Exercise notes start empty.</p>`;
   w.exercises.forEach((x,i)=>{
-    h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3><div class="sub">${x.sets.filter(row=>row.done===true).length}/${x.sets.length} sets completed</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
+    h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3>${x.previousDate?`<p class="hint">Completed sets from ${short(x.previousDate)}. Adjust for today.</p>`:''}<div class="sub">${x.sets.filter(row=>row.done===true).length}/${x.sets.length} sets completed</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
     x.sets.forEach((row,j)=>{
       h+=`<div class="set-row ${row.done?'completed':''}"><label class="set-check" for="set-done-${i}-${j}"><input id="set-done-${i}-${j}" type="checkbox" data-workout="done" data-ex="${i}" data-set="${j}" aria-label="Mark ${esc(x.name)} set ${j+1} as completed" ${row.done?'checked':''}><span>${j+1}</span></label><input type="number" min="0" step="any" inputmode="decimal" data-workout="weight" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} weight in kg" placeholder="kg" value="${esc(row.weight)}"><input type="number" min="0" step="1" inputmode="numeric" data-workout="reps" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} repetitions" placeholder="reps" value="${esc(row.reps)}"><button class="remove-set" data-a="remove-set" data-ex="${i}" data-set="${j}" aria-label="Remove set ${j+1} from ${esc(x.name)}">×</button></div>`;
     });
@@ -226,7 +226,7 @@ function renderWorkout(){
 function cleanPlans(value){
   if(!Array.isArray(value))return [];
   return value.filter(p=>p&&typeof p.name==='string'&&p.name.trim()&&Array.isArray(p.exercises))
-    .map(p=>({name:p.name.trim(),exercises:p.exercises.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim())}))
+    .map((p,i)=>({id:typeof p.id==='string'&&p.id?p.id:'legacy:'+i+':'+p.name.trim(),previousNames:Array.isArray(p.previousNames)?p.previousNames.filter(x=>typeof x==='string'):[],name:p.name.trim(),exercises:p.exercises.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim())}))
     .filter(p=>p.exercises.length);
 }
 function persistPlans(next){
@@ -234,14 +234,15 @@ function persistPlans(next){
   catch(e){toast('Could not save plans');return false}
 }
 function exercisesView(){
+  const editing=editingPlan===null?null:plans[editingPlan];
   let h=`<div class="top"><div><h1>Exercises</h1><div class="sub">Your training plans</div></div></div>
-  <form id="plan-form" class="card"><h2>Add training plan</h2>
-  <label for="plan-name">Plan name</label><input class="plan-input" id="plan-name" name="name" required maxlength="120" placeholder="e.g. Full body A">
-  <label for="plan-exercises">Exercise names</label><p class="hint">Enter one exercise per line.</p>
-  <textarea id="plan-exercises" name="exercises" required placeholder="Squat&#10;Bench press&#10;Row"></textarea>
-  <button class="btn" type="submit">Add plan</button></form>`;
+  <form id="plan-form" class="card"><h2>${editing?'Edit training plan':'Add training plan'}</h2>
+  <label for="plan-name">Plan name</label><input class="plan-input" id="plan-name" name="name" required maxlength="120" placeholder="e.g. Full body A" value="${editing?esc(editing.name):''}">
+  <label for="plan-exercises">Exercise names</label><p class="hint">Enter one exercise per line. Change the line order to reorder exercises.</p>
+  <textarea id="plan-exercises" name="exercises" required placeholder="Squat&#10;Bench press&#10;Row">${editing?esc(editing.exercises.join('\n')):''}</textarea>
+  <button class="btn" type="submit">${editing?'Save changes':'Add plan'}</button>${editing?'<button class="btn s" type="button" data-a="cancel-edit-plan">Cancel</button>':''}</form>`;
   if(!plans.length)h+='<p class="hint">No training plans yet. Add your first plan above.</p>';
-  plans.forEach((p,i)=>{h+=`<div class="card"><h2 class="plan-name">${esc(p.name)}</h2><ol class="plan-exercises">${p.exercises.map(x=>'<li>'+esc(x)+'</li>').join('')}</ol><button class="btn s" data-a="delete-plan" data-index="${i}">Delete plan</button></div>`});
+  plans.forEach((p,i)=>{h+=`<div class="card"><h2 class="plan-name">${esc(p.name)}</h2><ol class="plan-exercises">${p.exercises.map(x=>'<li>'+esc(x)+'</li>').join('')}</ol><button class="btn s" data-a="edit-plan" data-index="${i}">Edit plan</button><button class="btn s" data-a="delete-plan" data-index="${i}">Delete plan</button></div>`});
   return h;
 }
 
@@ -337,7 +338,7 @@ function restore(text){
   const have=Object.keys(db).filter(filled).length;
   if(!confirm('Replace all data in the app ('+have+' days) with this backup ('+n+' days and '+restoredPlans.length+' training plans)? This cannot be undone.'))return;
   if(!persistPlans(restoredPlans))return;
-  db=days;save();cur=today();tab='day';render();toast('Backup restored');
+  db=days;editingPlan=null;save();cur=today();tab='day';render();toast('Backup restored');
 }
 
 /* ---------- events ---------- */
@@ -346,7 +347,12 @@ document.addEventListener('submit',e=>{
   e.preventDefault();
   const name=$('plan-name').value.trim(),exercises=$('plan-exercises').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
   if(!name||!exercises.length)return toast('Enter a plan name and at least one exercise');
-  if(persistPlans([...plans,{name,exercises}])){render();toast('Training plan added')}
+  const next=plans.slice(),editing=editingPlan!==null;
+  if(editing){
+    const old=plans[editingPlan];if(!old)return;
+    next[editingPlan]={...old,name,exercises,previousNames:[...new Set([...(old.previousNames||[]),old.name].filter(n=>n!==name))]};
+  }else next.push({id:'plan:'+Date.now()+':'+Math.random().toString(36).slice(2),previousNames:[],name,exercises});
+  if(persistPlans(next)){editingPlan=null;render();toast(editing?'Training plan updated':'Training plan added')}
 });
 document.addEventListener('change',e=>{
   if(e.target.dataset&&e.target.dataset.workout==='done'){
@@ -428,10 +434,15 @@ document.addEventListener('click',async e=>{
   }
   if(act==='week-prev'){weekStart=addDays(weekStart,-7);render();toTop();return}
   if(act==='week-next'){if(weekStart<monday(today())){weekStart=addDays(weekStart,7);render();toTop()}return}
+  if(act==='edit-plan'){
+    const i=Number(a.dataset.index);if(!plans[i])return;
+    editingPlan=i;render();toTop();$('plan-name').focus();return;
+  }
+  if(act==='cancel-edit-plan'){editingPlan=null;render();return}
   if(act==='delete-plan'){
     const i=Number(a.dataset.index);
     if(plans[i]&&confirm('Delete training plan "'+plans[i].name+'"?')){
-      if(persistPlans(plans.filter((_,index)=>index!==i))){render();toast('Training plan deleted')}
+      if(persistPlans(plans.filter((_,index)=>index!==i))){editingPlan=null;render();toast('Training plan deleted')}
     }
     return;
   }
