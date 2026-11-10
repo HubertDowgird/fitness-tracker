@@ -15,9 +15,9 @@
 :root{--bg:#0c0f12;--card:#151a1f;--field:#0f1317;--line:#252c34;--txt:#eef1f4;--mut:#8b96a3;--acc:#5fd3a6;color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;margin:0;background:var(--bg);color:var(--txt);font:16px/1.4 -apple-system,BlinkMacSystemFont,"SF Pro Text",system-ui,sans-serif}
-body{position:fixed;inset:0;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
+body{height:100dvh;display:flex;flex-direction:column;overflow:hidden;padding-top:env(safe-area-inset-top,0px)}
 #app{flex:1;min-height:0;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain}
-.wrap{max-width:520px;margin:0 auto;padding:16px 16px 28px}
+.wrap{max-width:520px;margin:0 auto;padding:16px 16px 12px}
 .top{display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px;gap:12px}
 h1{font-size:28px;letter-spacing:-.02em;margin:0;font-weight:700}
 .sub{color:var(--mut);font-size:14px;margin-top:2px}
@@ -48,7 +48,7 @@ textarea{width:100%;min-height:84px;background:var(--field);border:1px solid var
 .hint{color:var(--mut);font-size:14px;margin:14px 4px}
 details.card summary{cursor:pointer;color:var(--mut)}
 details.card[open] summary{margin-bottom:10px}
-nav{flex:none;display:flex;background:var(--bg);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+nav{flex:none;display:flex;background:var(--bg);border-top:1px solid var(--line);padding-bottom:max(0px, calc(env(safe-area-inset-bottom,0px) - 8px))}
 nav button{flex:1;background:none;border:0;color:var(--mut);font:inherit;font-size:12px;padding:10px 0 9px;display:flex;flex-direction:column;align-items:center;gap:3px}
 nav button.on{color:var(--acc)}
 nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
@@ -59,6 +59,10 @@ nav svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:1.8;st
 pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo,monospace;background:var(--field);border:1px solid var(--line);border-radius:12px;padding:12px;margin:12px 0}
 #toast{position:fixed;left:50%;bottom:calc(90px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--acc);color:#05150e;padding:10px 18px;border-radius:99px;font-weight:600;opacity:0;transition:opacity .25s;pointer-events:none;z-index:10;max-width:90%;text-align:center}
 #toast.show{opacity:1}
+.plan-input{width:100%;background:var(--field);border:1px solid var(--line);border-radius:12px;color:var(--txt);font:inherit;padding:12px;margin:6px 0 12px}
+.plan-input:focus{outline:1px solid var(--acc)}
+.plan-exercises{padding-left:24px;overflow-wrap:anywhere}
+.plan-name{overflow-wrap:anywhere;color:var(--txt)!important}
 </style>
 </head>
 <body>
@@ -66,6 +70,7 @@ pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo
 <nav>
   <button id="n-day"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M8 12.5l3 3 5-6"/></svg>Today</button>
   <button id="n-list"><svg viewBox="0 0 24 24"><path d="M8 6h12M8 12h12M8 18h12M4 6h.01M4 12h.01M4 18h.01"/></svg>Days</button>
+  <button id="n-ex"><svg viewBox="0 0 24 24"><path d="M6 8v8M3 10v4M18 8v8M21 10v4M6 12h12"/></svg>Exercises</button>
   <button id="n-bk"><svg viewBox="0 0 24 24"><path d="M12 4v11M7.5 10.5L12 15l4.5-4.5M5 19h14"/></svg>Backup</button>
 </nav>
 <input type="file" id="file" accept=".json,application/json" hidden>
@@ -77,7 +82,9 @@ pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo
 </div></div>
 <div id="toast"></div>
 <script>
-const K='fit.days.v1',KB='fit.lastBackup';
+const K='fit.days.v1',KB='fit.lastBackup',KP='fit.plans.v1';
+let plans=[];
+try{plans=cleanPlans(JSON.parse(localStorage.getItem(KP)||'[]'))}catch(e){}
 let db={};
 try{db=JSON.parse(localStorage.getItem(K)||'{}')}catch(e){db={}}
 const $=id=>document.getElementById(id);
@@ -87,7 +94,7 @@ const today=()=>fmt(new Date());
 const addDays=(s,n)=>{const d=new Date(s+'T12:00:00');d.setDate(d.getDate()+n);return fmt(d)};
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const filled=k=>db[k]&&Object.keys(db[k]).length>0;
-let cur=today(),tab='day';
+let cur=today(),tab='day',weekEnd=today();
 
 function save(){try{localStorage.setItem(K,JSON.stringify(db))}catch(e){toast('Could not save data')}}
 function toast(t){const el=$('toast');el.textContent=t;el.classList.add('show');clearTimeout(toast.t);toast.t=setTimeout(()=>el.classList.remove('show'),2200)}
@@ -97,9 +104,9 @@ const toTop=()=>{$('app').scrollTop=0};
 
 const CARDS=[
  {t:'Body weight',big:1,r:[['weight','Morning weight','kg','decimal']]},
- {t:'Nutrition',r:[['kcal','Calories eaten','kcal','numeric'],['p','Protein','g','decimal'],['c','Carbohydrates','g','decimal'],['f','Fat','g','decimal']]},
+ {t:'Sleep',r:[['sh','Hours','h','numeric'],['sm','Minutes','min','numeric'],['ss','Sleep score','','numeric']]},
  {t:'Activity',r:[['steps','Steps','','numeric'],['act','Active calories','kcal','numeric'],['rest','Resting calories','kcal','numeric']]},
- {t:'Sleep',r:[['sh','Hours','h','numeric'],['sm','Minutes','min','numeric'],['ss','Sleep score','','numeric']]}
+ {t:'Nutrition',r:[['kcal','Calories eaten','kcal','numeric'],['p','Protein','g','decimal'],['c','Carbohydrates','g','decimal'],['f','Fat','g','decimal']]}
 ];
 const NUM=['weight','sh','sm','ss','steps','act','rest','kcal','p','c','f'];
 
@@ -107,7 +114,8 @@ function render(){
   $('n-day').classList.toggle('on',tab==='day');
   $('n-list').classList.toggle('on',tab==='list');
   $('n-bk').classList.toggle('on',tab==='bk');
-  $('app').innerHTML='<div class="wrap">'+(tab==='day'?dayView():tab==='list'?listView():backupView())+'</div>';
+  $('n-ex').classList.toggle('on',tab==='ex');
+  $('app').innerHTML='<div class="wrap">'+(tab==='day'?dayView():tab==='list'?listView():tab==='ex'?exercisesView():backupView())+'</div>';
 }
 
 function dayView(){
@@ -129,10 +137,9 @@ function dayView(){
 }
 
 function listView(){
-  const set=new Set(Object.keys(db).filter(filled));
-  for(let i=0;i<14;i++)set.add(addDays(today(),-i));
-  const ks=[...set].sort().reverse();
+  const ks=Array.from({length:7},(_,i)=>addDays(weekEnd,-i));
   let h=`<div class="top"><div><h1>Days</h1><div class="sub">Tap a day to view it or fill it in</div></div></div>`;
+  h+=`<div class="dn"><button data-a="week-prev">‹ Previous week</button><button data-a="week-next" ${weekEnd>=today()?'disabled':''}>Next week ›</button></div><p class="hint">${short(addDays(weekEnd,-6))} – ${short(weekEnd)}</p>`;
   for(const k of ks){
     const d=db[k]||{},s=[],has=filled(k);
     if(d.weight)s.push(d.weight+' kg');
@@ -143,11 +150,34 @@ function listView(){
   return h;
 }
 
+function cleanPlans(value){
+  if(!Array.isArray(value))return [];
+  return value.filter(p=>p&&typeof p.name==='string'&&p.name.trim()&&Array.isArray(p.exercises))
+    .map(p=>({name:p.name.trim(),exercises:p.exercises.filter(x=>typeof x==='string'&&x.trim()).map(x=>x.trim())}))
+    .filter(p=>p.exercises.length);
+}
+function persistPlans(next){
+  try{localStorage.setItem(KP,JSON.stringify(next));plans=next;return true}
+  catch(e){toast('Could not save plans');return false}
+}
+function exercisesView(){
+  let h=`<div class="top"><div><h1>Exercises</h1><div class="sub">Your training plans</div></div></div>
+  <form id="plan-form" class="card"><h2>Add training plan</h2>
+  <label for="plan-name">Plan name</label><input class="plan-input" id="plan-name" name="name" required maxlength="120" placeholder="e.g. Full body A">
+  <label for="plan-exercises">Exercise names</label><p class="hint">Enter one exercise per line.</p>
+  <textarea id="plan-exercises" name="exercises" required placeholder="Squat&#10;Bench press&#10;Row"></textarea>
+  <button class="btn" type="submit">Add plan</button></form>`;
+  if(!plans.length)h+='<p class="hint">No training plans yet. Add your first plan above.</p>';
+  plans.forEach((p,i)=>{h+=`<div class="card"><h2 class="plan-name">${esc(p.name)}</h2><ol class="plan-exercises">${p.exercises.map(x=>'<li>'+esc(x)+'</li>').join('')}</ol><button class="btn s" data-a="delete-plan" data-index="${i}">Delete plan</button></div>`});
+  return h;
+}
+
 function backupView(){
   const n=Object.keys(db).filter(filled).length,lb=localStorage.getItem(KB);
   return `<div class="top"><div><h1>Backup</h1><div class="sub">Save your data to a file</div></div></div>
   <div class="card"><h2>Status</h2>
    <div class="row"><label>Days saved</label><b>${n}</b></div>
+   <div class="row"><label>Training plans</label><b>${plans.length}</b></div>
    <div class="row"><label>Last backup</label><b>${lb?short(lb):'Never'}</b></div></div>
   <button class="btn" data-a="export">Export backup</button>
   <button class="btn s" data-a="import">Restore from file</button>
@@ -187,7 +217,7 @@ async function doCopy(){
 }
 
 /* ---------- backup ---------- */
-const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:1,exported:new Date().toISOString(),days:db},null,1);
+const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:2,exported:new Date().toISOString(),days:db,plans},null,1);
 function markBackup(){localStorage.setItem(KB,today());if(tab==='bk')render();toast('Backup exported')}
 
 async function exportBackup(){
@@ -219,13 +249,22 @@ function restore(text){
   let o;try{o=JSON.parse(text)}catch(e){return toast('This is not a valid backup')}
   if(!o||o.app!=='fitness-tracker'||!o.days||typeof o.days!=='object')return toast('This is not a fitness tracker backup');
   const days=clean(o.days),n=Object.keys(days).length;
-  if(!n)return toast('This backup contains no days');
+  const restoredPlans=o.plans===undefined?plans:cleanPlans(o.plans);
+  if(!n&&!restoredPlans.length)return toast('This backup contains no data');
   const have=Object.keys(db).filter(filled).length;
-  if(!confirm('Replace all data in the app ('+have+' days) with this backup ('+n+' days)? This cannot be undone.'))return;
+  if(!confirm('Replace all data in the app ('+have+' days) with this backup ('+n+' days and '+restoredPlans.length+' training plans)? This cannot be undone.'))return;
+  if(!persistPlans(restoredPlans))return;
   db=days;save();cur=today();tab='day';render();toast('Backup restored');
 }
 
 /* ---------- events ---------- */
+document.addEventListener('submit',e=>{
+  if(e.target.id!=='plan-form')return;
+  e.preventDefault();
+  const name=$('plan-name').value.trim(),exercises=$('plan-exercises').value.split(/\r?\n/).map(x=>x.trim()).filter(Boolean);
+  if(!name||!exercises.length)return toast('Enter a plan name and at least one exercise');
+  if(persistPlans([...plans,{name,exercises}])){render();toast('Training plan added')}
+});
 document.addEventListener('input',e=>{
   const k=e.target.dataset&&e.target.dataset.k;if(!k)return;
   const d=db[cur]=db[cur]||{};
@@ -240,6 +279,15 @@ document.addEventListener('click',async e=>{
   if(dd){cur=dd.dataset.d;tab='day';render();toTop();return}
   const a=e.target.closest('[data-a]');if(!a)return;
   const act=a.dataset.a;
+  if(act==='week-prev'){weekEnd=addDays(weekEnd,-7);render();toTop();return}
+  if(act==='week-next'){if(weekEnd<today()){weekEnd=addDays(weekEnd,7);render();toTop()}return}
+  if(act==='delete-plan'){
+    const i=Number(a.dataset.index);
+    if(plans[i]&&confirm('Delete training plan "'+plans[i].name+'"?')){
+      if(persistPlans(plans.filter((_,index)=>index!==i))){render();toast('Training plan deleted')}
+    }
+    return;
+  }
   if(act==='export')return exportBackup();
   if(act==='import')return $('file').click();
   if(act==='tcopy'){const ok=await copy(backupJson());return toast(ok?'Backup copied as text':'Copy failed')}
@@ -253,7 +301,8 @@ document.addEventListener('click',async e=>{
 
 $('file').onchange=async e=>{const f=e.target.files[0];e.target.value='';if(f)restore(await f.text())};
 $('n-day').onclick=()=>{cur=today();tab='day';render();toTop()};
-$('n-list').onclick=()=>{tab='list';render();toTop()};
+$('n-list').onclick=()=>{weekEnd=today();tab='list';render();toTop()};
+$('n-ex').onclick=()=>{tab='ex';render();toTop()};
 $('n-bk').onclick=()=>{tab='bk';render();toTop()};
 $('cp').onclick=async()=>{const ok=await copy($('rep').textContent);toast(ok?'Copied to clipboard':'Copy failed')};
 $('cl').onclick=()=>$('sheet').classList.remove('show');
