@@ -63,6 +63,16 @@ pre{white-space:pre-wrap;word-break:break-word;font:13px/1.55 ui-monospace,Menlo
 .plan-input:focus{outline:1px solid var(--acc)}
 .plan-exercises{padding-left:24px;overflow-wrap:anywhere}
 .plan-name{overflow-wrap:anywhere;color:var(--txt)!important}
+.workout-toggle{display:flex;align-items:center;gap:10px;min-height:44px}
+.workout-toggle input{width:22px;height:22px;accent-color:var(--acc)}
+.workout-exercise{border-top:1px solid var(--line);padding-top:16px;margin-top:16px}
+.workout-exercise h3{font-size:17px;margin:0 0 10px;overflow-wrap:anywhere}
+.set-row{display:grid;grid-template-columns:30px minmax(0,1fr) minmax(0,1fr) 44px;gap:8px;align-items:center;margin-bottom:8px}
+.set-row input{width:100%;min-width:0;background:var(--field);border:1px solid var(--line);border-radius:10px;color:var(--txt);font:inherit;padding:10px 8px}
+.set-row input:focus{outline:1px solid var(--acc)}
+.set-head{font-size:12px;color:var(--mut)}
+.remove-set{min-height:44px;border:1px solid var(--line);border-radius:10px;background:transparent;color:var(--mut);font-size:22px}
+.workout-exercise .btn{font-size:14px;padding:10px;min-height:44px;margin-bottom:12px}
 </style>
 </head>
 <body>
@@ -129,6 +139,7 @@ function dayView(){
     }
     h+='</div>';
   }
+  h+=workoutView(d);
   h+=`<div class="card"><h2>Notes</h2><textarea data-k="notes" placeholder="How did the day go?">${esc(d.notes||'')}</textarea></div>`;
   h+=d.done
     ?`<button class="btn" data-a="copy">Copy report</button><button class="btn s" data-a="reopen">Reopen day</button>`
@@ -145,9 +156,48 @@ function listView(){
     if(d.weight)s.push(d.weight+' kg');
     if(d.kcal)s.push(d.kcal+' kcal');
     if(d.steps)s.push(d.steps+' steps');
-    h+=`<button class="day" data-d="${k}"><div><b>${k===today()?'Today, ':''}${short(k)}</b><span class="m">${has?(s.join(', ')||'Notes only'):'No data yet'}</span></div><span class="pill ${d.done?'ok':''}">${d.done?'Completed':has?'In progress':'Empty'}</span></button>`;
+    if(d.workout)s.push('Workout: '+(d.workout.planName||'Plan not selected'));
+    h+=`<button class="day" data-d="${k}"><div><b>${k===today()?'Today, ':''}${short(k)}</b><span class="m">${has?(esc(s.join(', '))||'Notes only'):'No data yet'}</span></div><span class="pill ${d.done?'ok':''}">${d.done?'Completed':has?'In progress':'Empty'}</span></button>`;
   }
   return h;
+}
+
+function blankSet(){return {weight:'',reps:''}}
+function cleanWorkout(value){
+  if(!value||typeof value!=='object'||Array.isArray(value))return null;
+  const numberText=(v,integer=false)=>{
+    if(typeof v!=='string'&&typeof v!=='number')return '';
+    const text=String(v).replace(',','.').trim(),n=Number(text);
+    return text!==''&&Number.isFinite(n)&&n>=0&&(!integer||Number.isInteger(n))?text:'';
+  };
+  return {
+    planName:typeof value.planName==='string'?value.planName:'',
+    exercises:Array.isArray(value.exercises)?value.exercises.filter(x=>x&&typeof x.name==='string').map(x=>({
+      name:x.name,notes:typeof x.notes==='string'?x.notes:'',
+      sets:Array.isArray(x.sets)?x.sets.map(row=>({weight:numberText(row&&row.weight),reps:numberText(row&&row.reps,true)})):[blankSet()]
+    })):[]
+  };
+}
+function workoutView(d){
+  const w=d.workout;
+  let h=`<div class="card"><h2>Workout</h2><label class="workout-toggle"><input id="workout-enabled" type="checkbox" ${w?'checked':''}>I trained this day</label>`;
+  if(!w)return h+'</div>';
+  h+=`<label for="workout-plan">Training plan</label><select id="workout-plan" class="plan-input"><option value="">${w.planName?'Change training plan…':'Choose training plan…'}</option>${plans.map((p,i)=>`<option value="${i}">${esc(p.name)}</option>`).join('')}</select>`;
+  if(!plans.length)h+='<p class="hint">Create a training plan in Exercises to select it here.</p><button class="btn s" data-a="open-plans">Go to Exercises</button>';
+  if(w.planName)h+=`<p class="plan-name"><b>${esc(w.planName)}</b></p>`;
+  w.exercises.forEach((x,i)=>{
+    h+=`<section class="workout-exercise"><h3>${esc(x.name)}</h3><div class="sub">${x.sets.length} ${x.sets.length===1?'set':'sets'}</div><div class="set-row set-head" aria-hidden="true"><span>Set</span><span>Weight (kg)</span><span>Reps</span><span></span></div>`;
+    x.sets.forEach((row,j)=>{
+      h+=`<div class="set-row"><span>${j+1}</span><input type="number" min="0" step="any" inputmode="decimal" data-workout="weight" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} weight in kg" placeholder="kg" value="${esc(row.weight)}"><input type="number" min="0" step="1" inputmode="numeric" data-workout="reps" data-ex="${i}" data-set="${j}" aria-label="${esc(x.name)} set ${j+1} repetitions" placeholder="reps" value="${esc(row.reps)}"><button class="remove-set" data-a="remove-set" data-ex="${i}" data-set="${j}" aria-label="Remove set ${j+1} from ${esc(x.name)}">×</button></div>`;
+    });
+    h+=`<button class="btn s" data-a="add-set" data-ex="${i}">+ Add set</button><label for="exercise-note-${i}">Exercise note</label><textarea id="exercise-note-${i}" data-workout="notes" data-ex="${i}" placeholder="Technique, effort, or other notes">${esc(x.notes)}</textarea></section>`;
+  });
+  return h+'</div>';
+}
+function renderWorkout(){
+  const scroll=$('app').scrollTop;
+  render();
+  $('app').scrollTop=scroll;
 }
 
 function cleanPlans(value){
@@ -199,6 +249,15 @@ function report(date){
   sec('SLEEP',[dur,has('ss')&&'- Sleep score: '+n('ss')]);
   sec('ACTIVITY',[has('steps')&&'- Steps: '+Number(d.steps).toLocaleString('en-US'),has('act')&&'- Active calories burned: '+n('act')+' kcal',has('rest')&&'- Resting calories burned: '+n('rest')+' kcal']);
   sec('NUTRITION',[has('kcal')&&'- Calories consumed: '+n('kcal')+' kcal',has('p')&&'- Protein: '+n('p')+' g',has('c')&&'- Carbohydrates: '+n('c')+' g',has('f')&&'- Fat: '+n('f')+' g']);
+  if(d.workout){
+    const w=d.workout,lines=['- Plan: '+(w.planName||'Not selected')];
+    for(const x of w.exercises){
+      lines.push('- '+x.name+' ('+x.sets.length+' sets)');
+      x.sets.forEach((row,i)=>lines.push('  Set '+(i+1)+': '+(row.weight!==''?row.weight+' kg':'weight not entered')+' × '+(row.reps!==''?row.reps+' reps':'reps not entered')));
+      if(x.notes.trim())lines.push('  Note: '+x.notes.trim());
+    }
+    sec('WORKOUT',lines);
+  }
   if(d.notes&&d.notes.trim())sec('NOTES',['- '+d.notes.trim()]);
   return L.join('\n');
 }
@@ -217,7 +276,7 @@ async function doCopy(){
 }
 
 /* ---------- backup ---------- */
-const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:2,exported:new Date().toISOString(),days:db,plans},null,1);
+const backupJson=()=>JSON.stringify({app:'fitness-tracker',version:3,exported:new Date().toISOString(),days:db,plans},null,1);
 function markBackup(){localStorage.setItem(KB,today());if(tab==='bk')render();toast('Backup exported')}
 
 async function exportBackup(){
@@ -240,6 +299,7 @@ function clean(days){
     for(const f of NUM)if(v[f]!==undefined&&v[f]!==''&&!isNaN(Number(v[f])))d[f]=String(v[f]);
     if(typeof v.notes==='string'&&v.notes.trim())d.notes=v.notes;
     if(v.done)d.done=1;
+    const workout=cleanWorkout(v.workout);if(workout)d.workout=workout;
     if(Object.keys(d).length)out[k]=d;
   }
   return out;
@@ -265,7 +325,49 @@ document.addEventListener('submit',e=>{
   if(!name||!exercises.length)return toast('Enter a plan name and at least one exercise');
   if(persistPlans([...plans,{name,exercises}])){render();toast('Training plan added')}
 });
+document.addEventListener('change',e=>{
+  if(e.target.id==='workout-enabled'){
+    const d=db[cur]||{};
+    if(e.target.checked){
+      d.workout={planName:'',exercises:[]};db[cur]=d;
+    }else{
+      if(d.workout&&!confirm('Remove the workout and all its sets from this day?')){
+        e.target.checked=true;return;
+      }
+      delete d.workout;
+      if(!Object.keys(d).length)delete db[cur];
+    }
+    save();renderWorkout();return;
+  }
+  if(e.target.id==='workout-plan'){
+    const value=e.target.value,w=db[cur]&&db[cur].workout;
+    if(value===''||!w)return;
+    const p=plans[Number(value)];if(!p)return;
+    if(w.planName&&!confirm('Replace this day’s workout with "'+p.name+'"? Existing sets and notes will be removed.')){
+      e.target.value='';return;
+    }
+    db[cur].workout={planName:p.name,exercises:p.exercises.map(name=>({name,notes:'',sets:[blankSet()]}))};
+    save();renderWorkout();
+  }
+});
 document.addEventListener('input',e=>{
+  const field=e.target.dataset&&e.target.dataset.workout;
+  if(field){
+    const w=db[cur]&&db[cur].workout,x=w&&w.exercises[Number(e.target.dataset.ex)];
+    if(!x)return;
+    if(field==='notes')x.notes=e.target.value;
+    else if(field==='weight'||field==='reps'){
+      const row=x.sets[Number(e.target.dataset.set)];if(!row)return;
+      const value=e.target.value.replace(',','.').trim(),n=Number(value);
+      if(value!==''&&(!Number.isFinite(n)||n<0||(field==='reps'&&!Number.isInteger(n)))){
+        e.target.setCustomValidity(field==='reps'?'Enter a whole number of repetitions (0 or more)':'Enter a weight of 0 or more');
+        return;
+      }
+      e.target.setCustomValidity('');
+      row[field]=value;
+    }
+    save();return;
+  }
   const k=e.target.dataset&&e.target.dataset.k;if(!k)return;
   const d=db[cur]=db[cur]||{};
   const v=k==='notes'?e.target.value:e.target.value.replace(',','.').trim();
@@ -279,6 +381,18 @@ document.addEventListener('click',async e=>{
   if(dd){cur=dd.dataset.d;tab='day';render();toTop();return}
   const a=e.target.closest('[data-a]');if(!a)return;
   const act=a.dataset.a;
+  if(act==='open-plans'){tab='ex';render();toTop();return}
+  if(act==='add-set'||act==='remove-set'){
+    const w=db[cur]&&db[cur].workout,x=w&&w.exercises[Number(a.dataset.ex)];
+    if(!x)return;
+    if(act==='add-set')x.sets.push(blankSet());
+    else{
+      const i=Number(a.dataset.set),row=x.sets[i];if(!row)return;
+      if((row.weight!==''||row.reps!=='')&&!confirm('Remove this set?'))return;
+      x.sets.splice(i,1);
+    }
+    save();renderWorkout();return;
+  }
   if(act==='week-prev'){weekEnd=addDays(weekEnd,-7);render();toTop();return}
   if(act==='week-next'){if(weekEnd<today()){weekEnd=addDays(weekEnd,7);render();toTop()}return}
   if(act==='delete-plan'){
