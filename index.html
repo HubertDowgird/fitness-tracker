@@ -135,7 +135,6 @@ function render(){
 function dayView(){
   const d=db[cur]||{},isT=cur===today();
   let h=`<div class="top"><div><h1>${isT?'Today':short(cur)}</h1><div class="sub">${isT?long(cur):'Editing a past day'}</div></div><span class="pill ${d.done?'ok':''}">${d.done?'Completed':'In progress'}</span></div>`;
-  h+=`<div class="dn"><button data-a="prev">‹ Previous day</button><button data-a="next" ${cur>=today()?'disabled':''}>Next day ›</button></div>`;
   for(const c of CARDS){
     h+=`<div class="card ${c.big?'big':''}"><h2>${c.t}</h2>`;
     for(const [k,l,u,m] of c.r){
@@ -439,9 +438,7 @@ document.addEventListener('click',async e=>{
   if(act==='import')return $('file').click();
   if(act==='tcopy'){const ok=await copy(backupJson());return toast(ok?'Backup copied as text':'Copy failed')}
   if(act==='trestore'){const t=$('bt').value.trim();return t?restore(t):toast('Paste the backup text first')}
-  if(act==='prev'){cur=addDays(cur,-1);render();toTop()}
-  else if(act==='next'){if(cur<today()){cur=addDays(cur,1);render();toTop()}}
-  else if(act==='close'){const d=db[cur]=db[cur]||{};d.done=1;save();render();await doCopy()}
+  if(act==='close'){const d=db[cur]=db[cur]||{};d.done=1;save();render();await doCopy()}
   else if(act==='copy')await doCopy();
   else if(act==='reopen'){delete db[cur].done;save();render()}
 });
